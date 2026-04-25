@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Blue rounded square background -->
+  <rect width="32" height="32" rx="7" fill="#2563EB"/>
+  <!-- FlaskConical icon (Lucide), scaled and centered -->
+  <g transform="translate(4, 4) scale(1)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 19.823a1 1 0 0 0 .9 1.477h12.76a1 1 0 0 0 .9-1.477L13.63 10.423A2 2 0 0 1 13.42 9.527V2"/>
+    <path d="M8.5 2h7"/>
+    <path d="M7 16h10"/>
+  </g>
+</svg>

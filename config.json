@@ -1,0 +1,13 @@
+{
+  "_instrucoes": "Preencha os campos abaixo conforme necessário. Campos em branco desativam a respectiva integração.",
+
+  "firebase": {
+    "_info": "Login com Google. Deixe vazio para desativar.",
+    "apiKey": "",
+    "authDomain": "",
+    "projectId": "",
+    "storageBucket": "",
+    "messagingSenderId": "",
+    "appId": ""
+  }
+}
