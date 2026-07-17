@@ -642,11 +642,8 @@ export function Orientacoes() {
                     {/* Expanded tabs */}
                     {isOpen && (
                       <div className="border-t border-gray-100 dark:border-gray-700 px-6 py-4">
-                        <Tabs defaultValue="tarefas">
+                        <Tabs defaultValue="reunioes">
                           <TabsList className="mb-4 flex-wrap h-auto gap-1">
-                            <TabsTrigger value="tarefas">
-                              Tarefas ({myTarefas.length})
-                            </TabsTrigger>
                             <TabsTrigger value="reunioes">
                               Reuniões ({reunioes.length})
                             </TabsTrigger>
@@ -656,50 +653,13 @@ export function Orientacoes() {
                             <TabsTrigger value="links">
                               Links ({(o.links_documentos ?? []).length})
                             </TabsTrigger>
+                            <TabsTrigger value="tarefas">
+                              Tarefas ({myTarefas.length})
+                            </TabsTrigger>
                             {o.projeto_original && (
                               <TabsTrigger value="projeto">Projeto</TabsTrigger>
                             )}
                           </TabsList>
-
-                          {/* ── Tarefas tab ── */}
-                          <TabsContent value="tarefas">
-                            <div className="space-y-2 mb-3">
-                              {myTarefas.map(t => (
-                                <div
-                                  key={t.id}
-                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                                >
-                                  <Checkbox
-                                    checked={t.concluida}
-                                    onCheckedChange={() => toggleTarefa(t)}
-                                  />
-                                  <span className={`text-sm ${t.concluida ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                                    {t.descricao}
-                                  </span>
-                                </div>
-                              ))}
-                              {myTarefas.length === 0 && (
-                                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">
-                                  Nenhuma tarefa cadastrada
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                              <Input
-                                value={activeTarefaId === o.id ? newTarefa : ''}
-                                onChange={e => { setActiveTarefaId(o.id); setNewTarefa(e.target.value) }}
-                                onKeyDown={e => { if (e.key === 'Enter') addTarefa(o.id) }}
-                                placeholder="Nova tarefa (Enter para adicionar)"
-                                className="flex-1"
-                              />
-                              <Button
-                                size="sm" variant="outline"
-                                onClick={() => { setActiveTarefaId(o.id); addTarefa(o.id) }}
-                              >
-                                <Plus className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TabsContent>
 
                           {/* ── Reuniões tab ── */}
                           <TabsContent value="reunioes">
@@ -931,6 +891,46 @@ export function Orientacoes() {
                               <Button
                                 size="sm" variant="outline"
                                 onClick={() => { setActiveLinkId(o.id); addLink(o.id) }}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TabsContent>
+
+                          {/* ── Tarefas tab ── */}
+                          <TabsContent value="tarefas">
+                            <div className="space-y-2 mb-3">
+                              {myTarefas.map(t => (
+                                <div
+                                  key={t.id}
+                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                                >
+                                  <Checkbox
+                                    checked={t.concluida}
+                                    onCheckedChange={() => toggleTarefa(t)}
+                                  />
+                                  <span className={`text-sm ${t.concluida ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                                    {t.descricao}
+                                  </span>
+                                </div>
+                              ))}
+                              {myTarefas.length === 0 && (
+                                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">
+                                  Nenhuma tarefa cadastrada
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                              <Input
+                                value={activeTarefaId === o.id ? newTarefa : ''}
+                                onChange={e => { setActiveTarefaId(o.id); setNewTarefa(e.target.value) }}
+                                onKeyDown={e => { if (e.key === 'Enter') addTarefa(o.id) }}
+                                placeholder="Nova tarefa (Enter para adicionar)"
+                                className="flex-1"
+                              />
+                              <Button
+                                size="sm" variant="outline"
+                                onClick={() => { setActiveTarefaId(o.id); addTarefa(o.id) }}
                               >
                                 <Plus className="w-4 h-4" />
                               </Button>
