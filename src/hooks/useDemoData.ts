@@ -17,9 +17,9 @@ const DEMO_PRESTACOES: Prestacao[] = [
 ]
 
 const DEMO_DESPESAS: Despesa[] = [
-  { id: '1', user_id: 'demo-user-id', prestacao_id: '1', descricao: 'Material de laboratório', data: '2023-05-10', valor: 4500, numero_nota_fiscal: 'NF-001234', prestador_servico: 'Lab Supplies Ltda', created_at: new Date().toISOString() },
-  { id: '2', user_id: 'demo-user-id', prestacao_id: '1', descricao: 'Passagem aérea — congresso', data: '2023-09-15', valor: 1200, prestador_servico: 'GOL Linhas Aéreas', created_at: new Date().toISOString() },
-  { id: '3', user_id: 'demo-user-id', prestacao_id: '2', descricao: 'Bolsa pesquisador colaborador', data: '2023-01-15', valor: 3000, prestador_servico: 'Nome do Pesquisador', created_at: new Date().toISOString() },
+  { id: '1', user_id: 'demo-user-id', prestacao_id: '1', descricao: 'Material de laboratório', data: '2023-05-10', valor: 4500, numero_nota_fiscal: 'NF-001234', prestador_servico: 'Lab Supplies Ltda', rubrica: 'Material de Consumo', created_at: new Date().toISOString() },
+  { id: '2', user_id: 'demo-user-id', prestacao_id: '1', descricao: 'Passagem aérea — congresso', data: '2023-09-15', valor: 1200, prestador_servico: 'GOL Linhas Aéreas', rubrica: 'Passagens e Locomoção', created_at: new Date().toISOString() },
+  { id: '3', user_id: 'demo-user-id', prestacao_id: '2', descricao: 'Bolsa pesquisador colaborador', data: '2023-01-15', valor: 3000, prestador_servico: 'Nome do Pesquisador', rubrica: 'Bolsas', created_at: new Date().toISOString() },
 ]
 
 const DEMO_DISCURSOS: Discurso[] = [

@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Receipt, Pencil, Trash2, ChevronDown, ChevronUp, FileText, DollarSign, Paperclip, Download, Archive, Loader2 } from 'lucide-react'
+import { Fragment, useState, useEffect, useRef } from 'react'
+import { Plus, Receipt, Pencil, Trash2, ChevronDown, ChevronUp, FileText, DollarSign, Paperclip, Download, Archive, Loader2, GripVertical, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDemoData } from '@/hooks/useDemoData'
 import { useToast } from '@/hooks/useToast'
 import { loadPrestacoes, savePrestacaoFile, deletePrestacaoFile, uploadAnexo, fetchAttachment } from '@/lib/githubStorage'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -20,6 +21,21 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+const RUBRICAS_SUGERIDAS = [
+  'Material de Consumo',
+  'Material Permanente',
+  'Serviços de Terceiros - Pessoa Física',
+  'Serviços de Terceiros - Pessoa Jurídica',
+  'Diárias',
+  'Passagens e Locomoção',
+  'Bolsas',
+  'Encargos Diversos',
+  'Publicações',
+  'Outros',
+]
+
+type DespesaSortField = 'descricao' | 'data' | 'prestador' | 'nf' | 'rubrica' | 'anexos' | 'valor'
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
@@ -31,6 +47,37 @@ function fileViewerUrl(anexo: Anexo): string {
   if (!anexo.path) return anexo.url
   const base = window.location.href.split('#')[0]
   return `${base}#/file/${anexo.path}`
+}
+
+/** Clickable table header that toggles ascending/descending sort for a despesa column. */
+function SortHead({ field, label, align, sortField, sortDir, onSort }: {
+  field: DespesaSortField
+  label: string
+  align?: 'right'
+  sortField: DespesaSortField
+  sortDir: 'asc' | 'desc'
+  onSort: (field: DespesaSortField) => void
+}) {
+  const active = sortField === field
+  return (
+    <TableHead className={align === 'right' ? 'text-right' : ''}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200',
+          align === 'right' && 'flex-row-reverse'
+        )}
+      >
+        {label}
+        {active ? (
+          sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </button>
+    </TableHead>
+  )
 }
 
 function exportPDF(prestacoes: Prestacao[]) {
@@ -64,16 +111,17 @@ function exportDespesasPDF(prestacao: Prestacao, myDespesas: Despesa[]) {
   const total = myDespesas.reduce((s, d) => s + d.valor, 0)
   autoTable(doc, {
     startY: prestacao.agencia_fomento ? 40 : 34,
-    head: [['Descrição', 'Data', 'Prestador', 'Nota Fiscal', 'Valor']],
+    head: [['Descrição', 'Data', 'Prestador', 'Nota Fiscal', 'Rubrica', 'Valor']],
     body: [
       ...myDespesas.map(d => [
         d.descricao,
         formatDate(d.data),
         d.prestador_servico ?? '—',
         d.numero_nota_fiscal ?? '—',
+        d.rubrica ?? '—',
         formatCurrency(d.valor),
       ]),
-      ['', '', '', 'Total', formatCurrency(total)],
+      ['', '', '', '', 'Total', formatCurrency(total)],
     ],
     styles: { fontSize: 8 },
     headStyles: { fillColor: [37, 99, 235] },
@@ -94,10 +142,11 @@ function exportDespesasExcel(prestacao: Prestacao, myDespesas: Despesa[]) {
     Data: formatDate(d.data),
     'Prestador de Serviço': d.prestador_servico ?? '',
     'Nota Fiscal': d.numero_nota_fiscal ?? '',
+    Rubrica: d.rubrica ?? '',
     'Valor (R$)': d.valor,
   }))
   const total = myDespesas.reduce((s, d) => s + d.valor, 0)
-  rows.push({ Descrição: 'TOTAL', Data: '', 'Prestador de Serviço': '', 'Nota Fiscal': '', 'Valor (R$)': total })
+  rows.push({ Descrição: 'TOTAL', Data: '', 'Prestador de Serviço': '', 'Nota Fiscal': '', Rubrica: '', 'Valor (R$)': total })
   const ws = XLSX.utils.json_to_sheet(rows)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Despesas')
@@ -127,7 +176,7 @@ const emptyPrestacao: Omit<Prestacao, 'id' | 'user_id' | 'created_at' | 'updated
 }
 
 const emptyDespesa: Omit<Despesa, 'id' | 'user_id' | 'prestacao_id' | 'created_at'> = {
-  descricao: '', data: '', valor: 0, numero_nota_fiscal: '', prestador_servico: '',
+  descricao: '', data: '', valor: 0, numero_nota_fiscal: '', prestador_servico: '', rubrica: '',
 }
 
 export function Prestacoes() {
@@ -166,6 +215,10 @@ export function Prestacoes() {
 
   const [expandedDespesaFiles, setExpandedDespesaFiles] = useState<string | null>(null)
   const [zippingId, setZippingId] = useState<string | null>(null)
+
+  // Despesa table sort (applies to whichever prestação is expanded)
+  const [sortField, setSortField] = useState<DespesaSortField>('data')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const prestacaoFileRef = useRef<HTMLInputElement>(null)
   const despesaFileRef = useRef<HTMLInputElement>(null)
@@ -350,6 +403,7 @@ export function Prestacoes() {
       descricao: d.descricao, data: d.data, valor: d.valor,
       numero_nota_fiscal: d.numero_nota_fiscal ?? '',
       prestador_servico: d.prestador_servico ?? '',
+      rubrica: d.rubrica ?? '',
     })
     setPendingDespesaAnexos(despesaAnexos.get(d.id) ?? [])
     setPendingDespesaFiles([])
@@ -428,6 +482,66 @@ export function Prestacoes() {
     toast({ title: 'Despesa removida' })
   }
 
+  // ── Sorting ──────────────────────────────────────────────────────────────
+
+  function toggleSort(field: DespesaSortField) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
+  function sortDespesas(list: Despesa[]): Despesa[] {
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => {
+      switch (sortField) {
+        case 'descricao': return a.descricao.localeCompare(b.descricao) * dir
+        case 'data': return (a.data ?? '').localeCompare(b.data ?? '') * dir
+        case 'prestador': return (a.prestador_servico ?? '').localeCompare(b.prestador_servico ?? '') * dir
+        case 'nf': return (a.numero_nota_fiscal ?? '').localeCompare(b.numero_nota_fiscal ?? '') * dir
+        case 'rubrica': return (a.rubrica ?? '').localeCompare(b.rubrica ?? '') * dir
+        case 'anexos': return ((despesaAnexos.get(a.id)?.length ?? 0) - (despesaAnexos.get(b.id)?.length ?? 0)) * dir
+        case 'valor': return (a.valor - b.valor) * dir
+        default: return 0
+      }
+    })
+  }
+
+  // ── Drag and drop: move despesa between prestações ──────────────────────
+
+  async function moveDespesa(despesa: Despesa, destPrestacaoId: string) {
+    const destPrestacao = prestacoes.find(p => p.id === destPrestacaoId)
+    if (!destPrestacao) return
+    const updatedDespesas = despesas.map(d => d.id === despesa.id ? { ...d, prestacao_id: destPrestacaoId } : d)
+
+    if (isDemoMode) {
+      setDespesas(updatedDespesas)
+      toast({ title: 'Despesa movida', description: `Movida para "${destPrestacao.titulo}"` })
+      return
+    }
+
+    const sourcePrestacao = prestacoes.find(p => p.id === despesa.prestacao_id)
+    try {
+      if (sourcePrestacao) await savePrestacaoFile(sourcePrestacao, updatedDespesas)
+      await savePrestacaoFile(destPrestacao, updatedDespesas)
+    } catch (err: any) {
+      toast({ title: 'Erro ao mover despesa', description: err.message, variant: 'destructive' }); return
+    }
+    setDespesas(updatedDespesas)
+    toast({ title: 'Despesa movida', description: `Movida para "${destPrestacao.titulo}"` })
+  }
+
+  function handleDragEnd(result: DropResult) {
+    const { destination, draggableId } = result
+    if (!destination || !destination.droppableId.startsWith('prestacao-')) return
+    const destPrestacaoId = destination.droppableId.slice('prestacao-'.length)
+    const despesa = despesas.find(d => d.id === draggableId)
+    if (!despesa || despesa.prestacao_id === destPrestacaoId) return
+    moveDespesa(despesa, destPrestacaoId)
+  }
+
   // ── ZIP export ───────────────────────────────────────────────────────────
 
   async function exportDespesasZip(prestacao: Prestacao, myDespesas: Despesa[]) {
@@ -444,10 +558,11 @@ export function Prestacoes() {
         Data: formatDate(d.data),
         'Prestador de Serviço': d.prestador_servico ?? '',
         'Nota Fiscal': d.numero_nota_fiscal ?? '',
+        Rubrica: d.rubrica ?? '',
         'Valor (R$)': d.valor,
       }))
       const total = myDespesas.reduce((s, d) => s + d.valor, 0)
-      rows.push({ Descrição: 'TOTAL', Data: '', 'Prestador de Serviço': '', 'Nota Fiscal': '', 'Valor (R$)': total })
+      rows.push({ Descrição: 'TOTAL', Data: '', 'Prestador de Serviço': '', 'Nota Fiscal': '', Rubrica: '', 'Valor (R$)': total })
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Despesas')
@@ -591,16 +706,27 @@ export function Prestacoes() {
               <Button variant="ghost" size="sm" className="mt-3" onClick={openNew}>Adicionar primeira prestação</Button>
             </div>
           ) : (
+            <DragDropContext onDragEnd={handleDragEnd}>
             <div>
               {prestacoes.map(p => {
                 const isOpen = expanded === p.id
-                const myDespesas = despesas
-                  .filter(d => d.prestacao_id === p.id)
-                  .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+                const myDespesas = sortDespesas(despesas.filter(d => d.prestacao_id === p.id))
                 const myAnexos = prestacaoAnexos.get(p.id) ?? []
+                const myTotalGasto = myDespesas.reduce((s, d) => s + d.valor, 0)
+                const mySaldo = p.total_recursos != null ? p.total_recursos - myTotalGasto : null
                 return (
                   <div key={p.id} className="border-b border-gray-100 dark:border-gray-700 last:border-0">
-                    <div className="flex items-center gap-3 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onClick={() => setExpanded(isOpen ? null : p.id)}>
+                    <Droppable droppableId={`prestacao-${p.id}`} type="DESPESA">
+                      {(dropProvided, dropSnapshot) => (
+                        <div
+                          ref={dropProvided.innerRef}
+                          {...dropProvided.droppableProps}
+                          className={cn(
+                            'flex items-center gap-3 px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors',
+                            dropSnapshot.isDraggingOver && 'bg-blue-50 dark:bg-blue-950 ring-2 ring-inset ring-blue-400'
+                          )}
+                          onClick={() => setExpanded(isOpen ? null : p.id)}
+                        >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-gray-900 dark:text-white truncate">{p.titulo}</span>
@@ -620,11 +746,20 @@ export function Prestacoes() {
                               <Badge variant="secondary">{myAnexos.length} docs</Badge>
                             </span>
                           )}
+                          {dropSnapshot.isDraggingOver && (
+                            <span className="text-xs font-medium text-blue-600 dark:text-blue-300">Soltar aqui para mover a despesa</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
                           {p.numero_processo && <span>Proc.: {p.numero_processo}</span>}
                           {p.vigencia_inicio && <span>{formatDate(p.vigencia_inicio)} – {formatDate(p.vigencia_fim ?? null)}</span>}
-                          {p.total_recursos != null && <span className="font-medium text-green-700">{formatCurrency(p.total_recursos)}</span>}
+                          {p.total_recursos != null && <span className="font-medium text-green-700">Financiado: {formatCurrency(p.total_recursos)}</span>}
+                          <span className="font-medium text-orange-600 dark:text-orange-400">Gasto: {formatCurrency(myTotalGasto)}</span>
+                          {mySaldo != null && (
+                            <span className={cn('font-medium', mySaldo >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400')}>
+                              Saldo: {formatCurrency(mySaldo)}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -637,7 +772,10 @@ export function Prestacoes() {
                         </Button>
                         {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 dark:text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />}
                       </div>
-                    </div>
+                          {dropProvided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
 
                     {isOpen && (
                       <div className="px-6 pb-4 bg-gray-50 dark:bg-gray-900">
@@ -686,76 +824,100 @@ export function Prestacoes() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>Descrição</TableHead>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Prestador</TableHead>
-                                <TableHead>NF</TableHead>
-                                <TableHead>Anexos</TableHead>
-                                <TableHead className="text-right">Valor</TableHead>
+                                <TableHead className="w-8"></TableHead>
+                                <SortHead field="descricao" label="Descrição" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="data" label="Data" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="prestador" label="Prestador" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="nf" label="NF" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="rubrica" label="Rubrica" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="anexos" label="Anexos" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="valor" label="Valor" align="right" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                                 <TableHead></TableHead>
                               </TableRow>
                             </TableHeader>
-                            <TableBody>
-                              {myDespesas.map(d => {
-                                const dAnexos = despesaAnexos.get(d.id) ?? []
-                                const isFilesOpen = expandedDespesaFiles === d.id
-                                return (
-                                  <>
-                                    <TableRow key={d.id}>
-                                      <TableCell className="font-medium">{d.descricao}</TableCell>
-                                      <TableCell>{formatDate(d.data)}</TableCell>
-                                      <TableCell>{d.prestador_servico ?? '—'}</TableCell>
-                                      <TableCell>{d.numero_nota_fiscal ?? '—'}</TableCell>
-                                      <TableCell>
-                                        {dAnexos.length > 0 ? (
-                                          <button
-                                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                                            onClick={() => setExpandedDespesaFiles(isFilesOpen ? null : d.id)}
-                                          >
-                                            <Paperclip className="w-3 h-3" />
-                                            <Badge variant="secondary" className="text-xs px-1.5 py-0">{dAnexos.length}</Badge>
-                                          </button>
-                                        ) : (
-                                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                            <Droppable droppableId={`despesas-${p.id}`} type="DESPESA" isDropDisabled>
+                              {(bodyProvided) => (
+                                <TableBody ref={bodyProvided.innerRef} {...bodyProvided.droppableProps}>
+                                  {myDespesas.map((d, idx) => {
+                                    const dAnexos = despesaAnexos.get(d.id) ?? []
+                                    const isFilesOpen = expandedDespesaFiles === d.id
+                                    return (
+                                      <Fragment key={d.id}>
+                                        <Draggable draggableId={d.id} index={idx}>
+                                          {(dragProvided, dragSnapshot) => (
+                                            <TableRow
+                                              ref={dragProvided.innerRef}
+                                              {...dragProvided.draggableProps}
+                                              className={cn(dragSnapshot.isDragging && 'bg-blue-50 dark:bg-blue-950 shadow-lg')}
+                                            >
+                                              <TableCell className="w-8 px-2">
+                                                <span
+                                                  {...dragProvided.dragHandleProps}
+                                                  className="inline-flex cursor-grab text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 active:cursor-grabbing"
+                                                  title="Arrastar para mover para outra prestação"
+                                                >
+                                                  <GripVertical className="w-4 h-4" />
+                                                </span>
+                                              </TableCell>
+                                              <TableCell className="font-medium">{d.descricao}</TableCell>
+                                              <TableCell>{formatDate(d.data)}</TableCell>
+                                              <TableCell>{d.prestador_servico ?? '—'}</TableCell>
+                                              <TableCell>{d.numero_nota_fiscal ?? '—'}</TableCell>
+                                              <TableCell>{d.rubrica ?? '—'}</TableCell>
+                                              <TableCell>
+                                                {dAnexos.length > 0 ? (
+                                                  <button
+                                                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                                    onClick={() => setExpandedDespesaFiles(isFilesOpen ? null : d.id)}
+                                                  >
+                                                    <Paperclip className="w-3 h-3" />
+                                                    <Badge variant="secondary" className="text-xs px-1.5 py-0">{dAnexos.length}</Badge>
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                                )}
+                                              </TableCell>
+                                              <TableCell className="text-right font-medium text-green-700">{formatCurrency(d.valor)}</TableCell>
+                                              <TableCell>
+                                                <div className="flex items-center gap-0.5 justify-end">
+                                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDespesa(d)} title="Editar">
+                                                    <Pencil className="w-3 h-3" />
+                                                  </Button>
+                                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteDespesa(d.id, d.prestacao_id)} title="Remover">
+                                                    <Trash2 className="w-3 h-3 text-red-500" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          )}
+                                        </Draggable>
+                                        {isFilesOpen && dAnexos.length > 0 && (
+                                          <TableRow key={`${d.id}-files`}>
+                                            <TableCell colSpan={9} className="bg-blue-50 dark:bg-blue-950 py-2 px-4">
+                                              <div className="flex flex-col gap-1">
+                                                {dAnexos.map(a => (
+                                                  <a key={a.id} href={fileViewerUrl(a)} target="_blank" rel="noreferrer"
+                                                    className="inline-flex items-center gap-2 text-xs text-blue-700 hover:underline">
+                                                    <Download className="w-3 h-3 flex-shrink-0" />
+                                                    <span>{a.name}</span>
+                                                    <span className="text-gray-400">({formatFileSize(a.size)})</span>
+                                                  </a>
+                                                ))}
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
                                         )}
-                                      </TableCell>
-                                      <TableCell className="text-right font-medium text-green-700">{formatCurrency(d.valor)}</TableCell>
-                                      <TableCell>
-                                        <div className="flex items-center gap-0.5 justify-end">
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDespesa(d)} title="Editar">
-                                            <Pencil className="w-3 h-3" />
-                                          </Button>
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteDespesa(d.id, d.prestacao_id)} title="Remover">
-                                            <Trash2 className="w-3 h-3 text-red-500" />
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                    {isFilesOpen && dAnexos.length > 0 && (
-                                      <TableRow key={`${d.id}-files`}>
-                                        <TableCell colSpan={7} className="bg-blue-50 dark:bg-blue-950 py-2 px-4">
-                                          <div className="flex flex-col gap-1">
-                                            {dAnexos.map(a => (
-                                              <a key={a.id} href={fileViewerUrl(a)} target="_blank" rel="noreferrer"
-                                                className="inline-flex items-center gap-2 text-xs text-blue-700 hover:underline">
-                                                <Download className="w-3 h-3 flex-shrink-0" />
-                                                <span>{a.name}</span>
-                                                <span className="text-gray-400">({formatFileSize(a.size)})</span>
-                                              </a>
-                                            ))}
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    )}
-                                  </>
-                                )
-                              })}
-                              <TableRow>
-                                <TableCell colSpan={5} className="font-semibold text-right text-gray-700 dark:text-gray-200">Total:</TableCell>
-                                <TableCell className="text-right font-bold text-green-700">{formatCurrency(myDespesas.reduce((s, d) => s + d.valor, 0))}</TableCell>
-                                <TableCell />
-                              </TableRow>
-                            </TableBody>
+                                      </Fragment>
+                                    )
+                                  })}
+                                  <TableRow>
+                                    <TableCell colSpan={7} className="font-semibold text-right text-gray-700 dark:text-gray-200">Total:</TableCell>
+                                    <TableCell className="text-right font-bold text-green-700">{formatCurrency(myDespesas.reduce((s, d) => s + d.valor, 0))}</TableCell>
+                                    <TableCell />
+                                  </TableRow>
+                                </TableBody>
+                              )}
+                            </Droppable>
                           </Table>
                         )}
                       </div>
@@ -764,6 +926,7 @@ export function Prestacoes() {
                 )
               })}
             </div>
+            </DragDropContext>
           )}
         </CardContent>
       </Card>
@@ -893,6 +1056,18 @@ export function Prestacoes() {
             <div className="space-y-1.5">
               <Label>Nº da Nota Fiscal</Label>
               <Input value={despesaForm.numero_nota_fiscal} onChange={e => setDespesaForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rubrica</Label>
+              <Input
+                list="rubricas-sugeridas"
+                value={despesaForm.rubrica}
+                onChange={e => setDespesaForm(f => ({ ...f, rubrica: e.target.value }))}
+                placeholder="Ex: Material de Consumo"
+              />
+              <datalist id="rubricas-sugeridas">
+                {RUBRICAS_SUGERIDAS.map(r => <option key={r} value={r} />)}
+              </datalist>
             </div>
 
             {/* Despesa attachments */}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Receipt, MessageSquareText, FolderKanban, GraduationCap, BookOpen, LogOut, Menu, X, FlaskConical, Network, Globe, Sun, Moon } from 'lucide-react'
+import { Receipt, MessageSquareText, FolderKanban, GraduationCap, BookOpen, LogOut, Menu, X, FlaskConical, Network, Globe, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -16,7 +16,7 @@ const navItems = [
   { to: '/prestacoes', label: 'Prestações de Contas', icon: Receipt, color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-100' },
 ]
 
-function SidebarContent({ onClose }: { onClose?: () => void }) {
+function SidebarContent({ onClose, onCollapse }: { onClose?: () => void; onCollapse?: () => void }) {
   const { user, signOut, isDemoMode } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -44,11 +44,15 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             <div className="text-xs text-gray-400 dark:text-gray-500">coLAB/UFF</div>
           </div>
         </div>
-        {onClose && (
+        {onClose ? (
           <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-gray-500 dark:text-gray-400">
             <X className="w-4 h-4" />
           </button>
-        )}
+        ) : onCollapse ? (
+          <button onClick={onCollapse} title="Recolher sidebar" className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        ) : null}
       </div>
 
       {/* Demo badge */}
@@ -118,15 +122,30 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { theme, toggleTheme } = useTheme()
 
   return (
     <>
       {/* Desktop sidebar */}
-      <div className="hidden lg:flex w-64 flex-shrink-0 h-screen sticky top-0">
-        <SidebarContent />
+      <div className={`hidden lg:flex flex-shrink-0 h-screen sticky top-0 transition-all duration-200 ${collapsed ? 'w-12' : 'w-64'}`}>
+        {collapsed ? (
+          <div className="flex flex-col items-center w-full h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 py-4 gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <FlaskConical className="w-4 h-4 text-white" />
+            </div>
+            <button
+              onClick={onToggle}
+              title="Expandir sidebar"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <SidebarContent onCollapse={onToggle} />
+        )}
       </div>
 
       {/* Mobile top navbar */}

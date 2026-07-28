@@ -40,6 +40,7 @@ export interface Despesa {
   valor: number
   numero_nota_fiscal?: string
   prestador_servico?: string
+  rubrica?: string
   anexos?: Anexo[]   // receipts, invoices, etc.
   created_at: string
 }

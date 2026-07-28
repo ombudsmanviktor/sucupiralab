@@ -50,6 +50,7 @@ type StoredDespesa = {
   valor: number
   numero_nota_fiscal?: string
   prestador_servico?: string
+  rubrica?: string
   created_at: string
   anexos?: StoredAnexo[]
 }
@@ -271,6 +272,7 @@ export async function savePrestacaoFile(
       valor: d.valor,
       numero_nota_fiscal: d.numero_nota_fiscal,
       prestador_servico: d.prestador_servico,
+      rubrica: d.rubrica,
       created_at: d.created_at,
       anexos: (d.anexos ?? []).map(anexoToStored),
     })),
