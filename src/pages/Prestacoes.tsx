@@ -50,17 +50,18 @@ function fileViewerUrl(anexo: Anexo): string {
 }
 
 /** Clickable table header that toggles ascending/descending sort for a despesa column. */
-function SortHead({ field, label, align, sortField, sortDir, onSort }: {
+function SortHead({ field, label, align, className, sortField, sortDir, onSort }: {
   field: DespesaSortField
   label: string
   align?: 'right'
+  className?: string
   sortField: DespesaSortField
   sortDir: 'asc' | 'desc'
   onSort: (field: DespesaSortField) => void
 }) {
   const active = sortField === field
   return (
-    <TableHead className={align === 'right' ? 'text-right' : ''}>
+    <TableHead className={cn(align === 'right' ? 'text-right' : '', className)}>
       <button
         type="button"
         onClick={() => onSort(field)}
@@ -821,18 +822,18 @@ export function Prestacoes() {
                         {myDespesas.length === 0 ? (
                           <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">Nenhuma despesa registrada</p>
                         ) : (
-                          <Table>
+                          <Table className="table-fixed w-full">
                             <TableHeader>
                               <TableRow>
                                 <TableHead className="w-8"></TableHead>
-                                <SortHead field="descricao" label="Descrição" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="data" label="Data" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="prestador" label="Prestador" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="nf" label="NF" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="rubrica" label="Rubrica" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="anexos" label="Anexos" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <SortHead field="valor" label="Valor" align="right" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                                <TableHead></TableHead>
+                                <SortHead field="descricao" label="Descrição" className="w-[26%]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="data" label="Data" className="w-[82px] whitespace-nowrap" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="prestador" label="Prestador" className="w-[14%]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="nf" label="NF" className="w-[12%]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="rubrica" label="Rubrica" className="w-[14%]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="anexos" label="Anexos" className="w-[58px]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <SortHead field="valor" label="Valor" align="right" className="w-[100px]" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                                <TableHead className="w-[68px]"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <Droppable droppableId={`despesas-${p.id}`} type="DESPESA" isDropDisabled>
@@ -859,11 +860,19 @@ export function Prestacoes() {
                                                   <GripVertical className="w-4 h-4" />
                                                 </span>
                                               </TableCell>
-                                              <TableCell className="font-medium">{d.descricao}</TableCell>
-                                              <TableCell>{formatDate(d.data)}</TableCell>
-                                              <TableCell>{d.prestador_servico ?? '—'}</TableCell>
-                                              <TableCell>{d.numero_nota_fiscal ?? '—'}</TableCell>
-                                              <TableCell>{d.rubrica ?? '—'}</TableCell>
+                                              <TableCell className="max-w-0">
+                                                <span className="block truncate font-medium" title={d.descricao}>{d.descricao}</span>
+                                              </TableCell>
+                                              <TableCell className="whitespace-nowrap">{formatDate(d.data)}</TableCell>
+                                              <TableCell className="max-w-0">
+                                                <span className="block truncate" title={d.prestador_servico ?? ''}>{d.prestador_servico ?? '—'}</span>
+                                              </TableCell>
+                                              <TableCell className="max-w-0">
+                                                <span className="block truncate font-mono text-xs" title={d.numero_nota_fiscal ?? ''}>{d.numero_nota_fiscal ?? '—'}</span>
+                                              </TableCell>
+                                              <TableCell className="max-w-0">
+                                                <span className="block truncate" title={d.rubrica ?? ''}>{d.rubrica ?? '—'}</span>
+                                              </TableCell>
                                               <TableCell>
                                                 {dAnexos.length > 0 ? (
                                                   <button
