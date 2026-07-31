@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Plus, GraduationCap, Pencil, Trash2, FileText, ChevronDown, ChevronUp,
   BookOpen, Link2, Paperclip, Download, X, CalendarDays, Archive, ArchiveRestore,
+  Upload, Loader2,
 } from 'lucide-react'
-import { dump } from 'js-yaml'
+import { dump, load } from 'js-yaml'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDemoData } from '@/hooks/useDemoData'
 import { useToast } from '@/hooks/useToast'
@@ -204,6 +205,8 @@ export function Orientacoes() {
   const [pendingProjetoOriginal, setPendingProjetoOriginal] = useState<Anexo | null>(null)
   const [pendingProjetoFile, setPendingProjetoFile] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
 
   // Expand/collapse cards
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -362,6 +365,85 @@ export function Orientacoes() {
       toast({ title: o.arquivada ? 'Orientação reativada' : 'Orientação arquivada' })
     } catch (err: any) {
       toast({ title: 'Erro ao arquivar', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  /* ── Import YAML ── */
+
+  async function handleImportYAML(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const raw = load(text) as any[]
+      if (!Array.isArray(raw)) throw new Error('Arquivo inválido: esperado array YAML')
+
+      const importedOrientacoes: Orientacao[] = []
+      const importedTarefas: Tarefa[] = []
+
+      for (const item of raw) {
+        const o: Orientacao = {
+          id: item.id ?? crypto.randomUUID(),
+          user_id: isDemoMode ? 'demo-user-id' : 'github-user',
+          nome_orientando: item.nome_orientando ?? '',
+          curso: item.curso ?? 'Mestrado',
+          titulo_provisorio: item.titulo_provisorio,
+          ano_ingresso: item.ano_ingresso,
+          previsao_conclusao: item.previsao_conclusao,
+          exame_qualificacao: item.exame_qualificacao,
+          arquivada: item.arquivada,
+          leituras: item.leituras ?? [],
+          links_documentos: item.links_documentos ?? [],
+          reunioes: (item.reunioes ?? []).map((r: any) => ({
+            id: r.id ?? crypto.randomUUID(),
+            ...(r.data ? { data: r.data } : {}),
+            texto: r.texto ?? '',
+            ...(r.anexo ? { anexo: r.anexo as Anexo } : {}),
+          })),
+          ...(item.projeto_original ? { projeto_original: item.projeto_original as Anexo } : {}),
+          created_at: item.created_at ?? new Date().toISOString(),
+          updated_at: item.updated_at ?? new Date().toISOString(),
+        }
+        importedOrientacoes.push(o)
+
+        const itemTarefas: Tarefa[] = (item.tarefas ?? []).map((t: any) => ({
+          id: t.id ?? crypto.randomUUID(),
+          user_id: isDemoMode ? 'demo-user-id' : 'github-user',
+          orientacao_id: o.id,
+          descricao: t.descricao ?? '',
+          concluida: t.concluida ?? false,
+          created_at: t.created_at ?? new Date().toISOString(),
+        }))
+        importedTarefas.push(...itemTarefas)
+      }
+
+      // Merge: overwrite by id, append new
+      setOrientacoes(prev => {
+        const map = new Map(prev.map(x => [x.id, x]))
+        importedOrientacoes.forEach(o => map.set(o.id, o))
+        return Array.from(map.values())
+      })
+      setTarefas(prev => {
+        const ids = new Set(importedTarefas.map(t => t.orientacao_id))
+        const kept = prev.filter(t => !ids.has(t.orientacao_id))
+        return [...kept, ...importedTarefas]
+      })
+
+      if (!isDemoMode) {
+        for (let i = 0; i < importedOrientacoes.length; i++) {
+          const o = importedOrientacoes[i]
+          const its = importedTarefas.filter(t => t.orientacao_id === o.id)
+          await saveOrientacaoFile(o, its)
+        }
+      }
+
+      toast({ title: `${importedOrientacoes.length} orientação(ões) importada(s)` })
+    } catch (err: any) {
+      toast({ title: 'Erro ao importar', description: err.message, variant: 'destructive' })
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -588,6 +670,23 @@ export function Orientacoes() {
           <Button variant="outline" size="sm" onClick={() => exportAllYAML(orientacoes, tarefas)} title="Exporta todas as orientações em YAML para backup ou importação">
             <Download className="w-4 h-4" /> Exportar Todas
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => importFileRef.current?.click()}
+            disabled={importing}
+            title="Importar orientações de um arquivo YAML exportado anteriormente"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Importar
+          </Button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".yaml,.yml"
+            className="hidden"
+            onChange={handleImportYAML}
+          />
           <Button size="sm" onClick={openNew}>
             <Plus className="w-4 h-4" /> Nova Orientação
           </Button>
