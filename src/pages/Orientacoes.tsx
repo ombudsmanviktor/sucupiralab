@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Plus, GraduationCap, Pencil, Trash2, FileText, ChevronDown, ChevronUp,
-  BookOpen, Link2, Paperclip, Download, X, CalendarDays,
+  BookOpen, Link2, Paperclip, Download, X, CalendarDays, Archive, ArchiveRestore,
 } from 'lucide-react'
+import { dump } from 'js-yaml'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDemoData } from '@/hooks/useDemoData'
 import { useToast } from '@/hooks/useToast'
@@ -106,6 +107,53 @@ function exportExcel(orientacoes: Orientacao[]) {
   XLSX.writeFile(wb, 'orientacoes.xlsx')
 }
 
+function exportAllYAML(orientacoes: Orientacao[], tarefas: Tarefa[]) {
+  const data = orientacoes.map(o => ({
+    id: o.id,
+    nome_orientando: o.nome_orientando,
+    curso: o.curso,
+    ...(o.titulo_provisorio ? { titulo_provisorio: o.titulo_provisorio } : {}),
+    ...(o.ano_ingresso != null ? { ano_ingresso: o.ano_ingresso } : {}),
+    ...(o.previsao_conclusao ? { previsao_conclusao: o.previsao_conclusao } : {}),
+    ...(o.exame_qualificacao ? { exame_qualificacao: true } : {}),
+    ...(o.arquivada ? { arquivada: true } : {}),
+    leituras: o.leituras ?? [],
+    links_documentos: o.links_documentos ?? [],
+    reunioes: (o.reunioes ?? []).map(r => ({
+      id: r.id,
+      ...(r.data ? { data: r.data } : {}),
+      texto: r.texto,
+      ...(r.anexo ? { anexo: { name: r.anexo.name, size: r.anexo.size, ...(r.anexo.path ? { path: r.anexo.path } : {}) } } : {}),
+    })),
+    tarefas: tarefas.filter(t => t.orientacao_id === o.id).map(t => ({
+      id: t.id,
+      descricao: t.descricao,
+      concluida: t.concluida,
+      created_at: t.created_at,
+    })),
+    ...(o.projeto_original ? {
+      projeto_original: {
+        name: o.projeto_original.name,
+        size: o.projeto_original.size,
+        ...(o.projeto_original.path ? { path: o.projeto_original.path } : {}),
+      },
+    } : {}),
+    created_at: o.created_at,
+    updated_at: o.updated_at,
+  }))
+  const header = `# Exportação de Orientações — SucupiraLAB\n# Gerado em: ${new Date().toISOString()}\n\n`
+  const yamlStr = dump(data, { lineWidth: -1, sortKeys: false })
+  const blob = new Blob([header + yamlStr], { type: 'text/yaml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `orientacoes-${new Date().toISOString().slice(0, 10)}.yaml`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 /* ─── Constants ───────────────────────────────────────────────────────── */
 
 const CURSOS = ['Doutorado', 'Mestrado', 'Iniciação Científica', 'TCC', 'Pós-Doutorado']
@@ -159,6 +207,9 @@ export function Orientacoes() {
 
   // Expand/collapse cards
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  // Archived section
+  const [showArchived, setShowArchived] = useState(false)
 
   // Tarefa inline add
   const [newTarefa, setNewTarefa] = useState('')
@@ -294,6 +345,24 @@ export function Orientacoes() {
     setOrientacoes(prev => prev.filter(o => o.id !== id))
     setTarefas(prev => prev.filter(t => t.orientacao_id !== id))
     toast({ title: 'Orientação removida' })
+  }
+
+  /* ── Archive ── */
+
+  async function handleArchive(o: Orientacao) {
+    const updated: Orientacao = { ...o, arquivada: !o.arquivada, updated_at: new Date().toISOString() }
+    if (isDemoMode) {
+      setOrientacoes(prev => prev.map(x => x.id === o.id ? updated : x))
+      toast({ title: o.arquivada ? 'Orientação reativada' : 'Orientação arquivada' })
+      return
+    }
+    try {
+      await saveOrientacaoFile(updated, tarefas)
+      setOrientacoes(prev => prev.map(x => x.id === o.id ? updated : x))
+      toast({ title: o.arquivada ? 'Orientação reativada' : 'Orientação arquivada' })
+    } catch (err: any) {
+      toast({ title: 'Erro ao arquivar', description: err.message, variant: 'destructive' })
+    }
   }
 
   /* ── Tarefas ── */
@@ -484,7 +553,9 @@ export function Orientacoes() {
 
   /* ── Grouped list ── */
 
-  const byCurso = CURSOS.filter(c => orientacoes.some(o => o.curso === c))
+  const activeOrientacoes = orientacoes.filter(o => !o.arquivada)
+  const archivedOrientacoes = orientacoes.filter(o => o.arquivada)
+  const byCurso = CURSOS.filter(c => activeOrientacoes.some(o => o.curso === c))
 
   /* ─── Render ──────────────────────────────────────────────────────── */
 
@@ -514,6 +585,9 @@ export function Orientacoes() {
           <Button variant="outline" size="sm" onClick={() => exportPDF(orientacoes)}>
             <FileText className="w-4 h-4" /> PDF
           </Button>
+          <Button variant="outline" size="sm" onClick={() => exportAllYAML(orientacoes, tarefas)} title="Exporta todas as orientações em YAML para backup ou importação">
+            <Download className="w-4 h-4" /> Exportar Todas
+          </Button>
           <Button size="sm" onClick={openNew}>
             <Plus className="w-4 h-4" /> Nova Orientação
           </Button>
@@ -525,7 +599,7 @@ export function Orientacoes() {
         <Card className="sm:col-span-1">
           <CardContent className="pt-5 pb-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">{orientacoes.length}</p>
+            <p className="text-3xl font-bold text-gray-900 dark:text-white">{activeOrientacoes.length}</p>
           </CardContent>
         </Card>
         {CURSOS.map(c => (
@@ -533,7 +607,7 @@ export function Orientacoes() {
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-gray-500 dark:text-gray-400 leading-tight">{c}</p>
               <p className="text-3xl font-bold text-pink-700">
-                {orientacoes.filter(o => o.curso === c).length}
+                {activeOrientacoes.filter(o => o.curso === c).length}
               </p>
             </CardContent>
           </Card>
@@ -567,7 +641,7 @@ export function Orientacoes() {
               </span>
             </div>
             <div className="space-y-3">
-              {orientacoes.filter(o => o.curso === curso).map(o => {
+              {activeOrientacoes.filter(o => o.curso === curso).map(o => {
                 const isOpen = expanded === o.id
                 const myTarefas = tarefas.filter(t => t.orientacao_id === o.id)
                 const pendingTarefas = myTarefas.filter(t => !t.concluida).length
@@ -623,12 +697,21 @@ export function Orientacoes() {
                         <Button
                           variant="ghost" size="icon"
                           onClick={e => { e.stopPropagation(); openEdit(o) }}
+                          title="Editar"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           variant="ghost" size="icon"
+                          title="Arquivar orientação concluída"
+                          onClick={e => { e.stopPropagation(); handleArchive(o) }}
+                        >
+                          <Archive className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
                           onClick={e => { e.stopPropagation(); handleDelete(o.id) }}
+                          title="Excluir"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-red-500" />
                         </Button>
@@ -968,6 +1051,71 @@ export function Orientacoes() {
             </div>
           </div>
         ))
+      )}
+
+      {/* ── Orientações Concluídas (arquivadas) ── */}
+      {!loading && archivedOrientacoes.length > 0 && (
+        <div className="mt-2 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
+          <button
+            className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-300 transition-colors mb-3"
+            onClick={() => setShowArchived(v => !v)}
+          >
+            {showArchived ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            <Archive className="w-4 h-4" />
+            <span>Orientações Concluídas ({archivedOrientacoes.length})</span>
+          </button>
+          {showArchived && (
+            <div className="space-y-1.5">
+              {archivedOrientacoes.map(o => (
+                <div
+                  key={o.id}
+                  className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-lg group hover:border-gray-200 dark:hover:border-gray-600 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500">
+                      {o.nome_orientando.charAt(0)}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{o.nome_orientando}</span>
+                    {o.titulo_provisorio && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{o.titulo_provisorio}</p>
+                    )}
+                  </div>
+                  <Badge className={`${CURSO_COLORS[o.curso] ?? 'bg-gray-100 text-gray-700'} border-0 text-xs opacity-60`}>
+                    {o.curso}
+                  </Badge>
+                  {o.previsao_conclusao && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{o.previsao_conclusao}</span>
+                  )}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      title="Reativar orientação"
+                      onClick={() => handleArchive(o)}
+                    >
+                      <ArchiveRestore className="w-3.5 h-3.5 text-green-500" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      title="Editar"
+                      onClick={() => openEdit(o)}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      title="Excluir"
+                      onClick={() => handleDelete(o.id)}
+                    >
+                      <Trash2 className="w-3 h-3 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Form Dialog ── */}

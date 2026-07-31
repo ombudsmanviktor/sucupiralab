@@ -89,6 +89,7 @@ export interface Orientacao {
   ano_ingresso?: number
   previsao_conclusao?: string
   exame_qualificacao?: boolean  // Mestrado / Doutorado only
+  arquivada?: boolean
   leituras?: string[]
   notas_orientacao?: string     // legacy free-text field (kept for compat)
   reunioes?: NotaReuniao[]      // structured meeting log
