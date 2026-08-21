@@ -215,9 +215,6 @@ export function Orientacoes() {
   const [showArchived, setShowArchived] = useState(false)
 
   // Tarefa inline add
-  const [newTarefa, setNewTarefa] = useState('')
-  const [activeTarefaId, setActiveTarefaId] = useState<string | null>(null)
-
   // Reunião inline add
   const [activeReuniaoId, setActiveReuniaoId] = useState<string | null>(null)
   const [novaReuniaoData, setNovaReuniaoData] = useState('')
@@ -448,37 +445,6 @@ export function Orientacoes() {
   }
 
   /* ── Tarefas ── */
-
-  async function addTarefa(orientacaoId: string) {
-    if (!newTarefa.trim()) return
-    if (isDemoMode) {
-      const t: Tarefa = {
-        id: Date.now().toString(), user_id: 'demo-user-id',
-        orientacao_id: orientacaoId, descricao: newTarefa,
-        concluida: false, created_at: new Date().toISOString(),
-      }
-      setTarefas(prev => [...prev, t])
-      setNewTarefa('')
-      return
-    }
-    const t: Tarefa = { id: crypto.randomUUID(), user_id: 'github-user', orientacao_id: orientacaoId, descricao: newTarefa, concluida: false, created_at: new Date().toISOString() }
-    const updatedTarefas = [...tarefas, t]
-    setTarefas(updatedTarefas)
-    const orientacao = orientacoes.find(o => o.id === orientacaoId)!
-    await saveOrientacaoFile(orientacao, updatedTarefas).catch(() => {})
-    setNewTarefa('')
-  }
-
-  async function toggleTarefa(t: Tarefa) {
-    if (isDemoMode) {
-      setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, concluida: !x.concluida } : x))
-      return
-    }
-    const updatedTarefas = tarefas.map(x => x.id === t.id ? { ...x, concluida: !x.concluida } : x)
-    setTarefas(updatedTarefas)
-    const orientacao = orientacoes.find(o => o.id === t.orientacao_id)!
-    await saveOrientacaoFile(orientacao, updatedTarefas).catch(() => {})
-  }
 
   /* ── Reuniões ── */
 
@@ -742,8 +708,6 @@ export function Orientacoes() {
             <div className="space-y-3">
               {activeOrientacoes.filter(o => o.curso === curso).map(o => {
                 const isOpen = expanded === o.id
-                const myTarefas = tarefas.filter(t => t.orientacao_id === o.id)
-                const pendingTarefas = myTarefas.filter(t => !t.concluida).length
                 const reunioes = o.reunioes ?? []
                 const sortedReunioes = [...reunioes].sort((a, b) => {
                   if (a.data && b.data) return b.data.localeCompare(a.data)
@@ -788,11 +752,6 @@ export function Orientacoes() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {pendingTarefas > 0 && (
-                          <Badge variant="warning">
-                            {pendingTarefas} pendente{pendingTarefas !== 1 ? 's' : ''}
-                          </Badge>
-                        )}
                         <Button
                           variant="ghost" size="icon"
                           onClick={e => { e.stopPropagation(); openEdit(o) }}
@@ -834,9 +793,6 @@ export function Orientacoes() {
                             </TabsTrigger>
                             <TabsTrigger value="links">
                               Links ({(o.links_documentos ?? []).length})
-                            </TabsTrigger>
-                            <TabsTrigger value="tarefas">
-                              Tarefas ({myTarefas.length})
                             </TabsTrigger>
                             {o.projeto_original && (
                               <TabsTrigger value="projeto">Projeto</TabsTrigger>
@@ -1080,45 +1036,6 @@ export function Orientacoes() {
                           </TabsContent>
 
                           {/* ── Tarefas tab ── */}
-                          <TabsContent value="tarefas">
-                            <div className="space-y-2 mb-3">
-                              {myTarefas.map(t => (
-                                <div
-                                  key={t.id}
-                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                                >
-                                  <Checkbox
-                                    checked={t.concluida}
-                                    onCheckedChange={() => toggleTarefa(t)}
-                                  />
-                                  <span className={`text-sm ${t.concluida ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                                    {t.descricao}
-                                  </span>
-                                </div>
-                              ))}
-                              {myTarefas.length === 0 && (
-                                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">
-                                  Nenhuma tarefa cadastrada
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                              <Input
-                                value={activeTarefaId === o.id ? newTarefa : ''}
-                                onChange={e => { setActiveTarefaId(o.id); setNewTarefa(e.target.value) }}
-                                onKeyDown={e => { if (e.key === 'Enter') addTarefa(o.id) }}
-                                placeholder="Nova tarefa (Enter para adicionar)"
-                                className="flex-1"
-                              />
-                              <Button
-                                size="sm" variant="outline"
-                                onClick={() => { setActiveTarefaId(o.id); addTarefa(o.id) }}
-                              >
-                                <Plus className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TabsContent>
-
                           {/* ── Projeto Original tab (conditional) ── */}
                           {o.projeto_original && (
                             <TabsContent value="projeto">
