@@ -1,13 +1,13 @@
 // ─── GitHub-backed YAML storage layer ────────────────────────────────────
 // Each entity type is stored as individual YAML files inside a data/ folder
-// in the user's GitHub repository.  Sub-entities (Despesas, Tarefas, Eventos)
+// in the user's GitHub repository.  Sub-entities (Despesas, Eventos)
 // are embedded in their parent YAML so the data is self-contained.
 //
 // Folder structure:
 //   data/prestacoes/{id}.yaml   — Prestacao + embedded Despesas
 //   data/discursos/{id}.yaml
 //   data/projetos/{id}.yaml
-//   data/orientacoes/{id}.yaml  — Orientacao + embedded Tarefas
+//   data/orientacoes/{id}.yaml
 //   data/producao/{id}.yaml
 //
 // Binary attachments:
@@ -32,7 +32,6 @@ import type {
   Discurso,
   ProjetoFinanciado,
   Orientacao,
-  Tarefa,
   Publicacao,
   Anexo,
   Nucleacao,
@@ -72,16 +71,8 @@ type StoredPrestacao = {
   despesas: StoredDespesa[]
 }
 
-type StoredTarefa = {
-  id: string
-  descricao: string
-  concluida: boolean
-  created_at: string
-}
-
 type StoredOrientacao = Omit<Orientacao, 'user_id' | 'projeto_original'> & {
   projeto_original?: StoredAnexo
-  tarefas: StoredTarefa[]
 }
 
 // ─── SHA cache (avoids extra GET before every PUT) ────────────────────────
@@ -324,48 +315,24 @@ export async function deleteProjeto(id: string): Promise<void> {
 
 // ─── ORIENTAÇÕES ──────────────────────────────────────────────────────────
 
-export async function loadOrientacoes(): Promise<{
-  orientacoes: Orientacao[]
-  tarefas: Tarefa[]
-}> {
+export async function loadOrientacoes(): Promise<Orientacao[]> {
   const files = await listYamls('data/orientacoes')
   const docs = await Promise.all(files.map((f) => readYaml<StoredOrientacao>(f)))
-
-  const orientacoes: Orientacao[] = []
-  const tarefas: Tarefa[] = []
-
-  for (const doc of docs) {
+  return docs.map((doc) => {
     const projeto_original = doc.projeto_original
       ? storedToAnexo(doc.projeto_original)
       : undefined
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tarefas: _t, ...rest } = doc
-    orientacoes.push({ ...rest, user_id: GH_USER, projeto_original })
-    for (const t of doc.tarefas ?? []) {
-      tarefas.push({ ...t, user_id: GH_USER, orientacao_id: doc.id })
-    }
-  }
-
-  return { orientacoes, tarefas }
+    return { ...doc, user_id: GH_USER, projeto_original }
+  })
 }
 
-export async function saveOrientacaoFile(
-  orientacao: Orientacao,
-  allTarefas: Tarefa[]
-): Promise<void> {
-  const myTarefas = allTarefas.filter((t) => t.orientacao_id === orientacao.id)
+export async function saveOrientacaoFile(orientacao: Orientacao): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { user_id: _u, projeto_original, ...rest } = orientacao
   const doc: StoredOrientacao = {
     ...rest,
     updated_at: new Date().toISOString(),
     projeto_original: projeto_original ? anexoToStored(projeto_original) : undefined,
-    tarefas: myTarefas.map((t) => ({
-      id: t.id,
-      descricao: t.descricao,
-      concluida: t.concluida,
-      created_at: t.created_at,
-    })),
   }
   await writeYaml(
     `data/orientacoes/${orientacao.id}.yaml`,

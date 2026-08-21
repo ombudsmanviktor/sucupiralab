@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ToastContainer } from '@/components/ui/toast'
-import type { Orientacao, Tarefa, NotaReuniao, Anexo } from '@/types'
+import type { Orientacao, NotaReuniao, Anexo } from '@/types'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -108,7 +108,7 @@ function exportExcel(orientacoes: Orientacao[]) {
   XLSX.writeFile(wb, 'orientacoes.xlsx')
 }
 
-function exportAllYAML(orientacoes: Orientacao[], tarefas: Tarefa[]) {
+function exportAllYAML(orientacoes: Orientacao[]) {
   const data = orientacoes.map(o => ({
     id: o.id,
     nome_orientando: o.nome_orientando,
@@ -125,12 +125,6 @@ function exportAllYAML(orientacoes: Orientacao[], tarefas: Tarefa[]) {
       ...(r.data ? { data: r.data } : {}),
       texto: r.texto,
       ...(r.anexo ? { anexo: { name: r.anexo.name, size: r.anexo.size, ...(r.anexo.path ? { path: r.anexo.path } : {}) } } : {}),
-    })),
-    tarefas: tarefas.filter(t => t.orientacao_id === o.id).map(t => ({
-      id: t.id,
-      descricao: t.descricao,
-      concluida: t.concluida,
-      created_at: t.created_at,
     })),
     ...(o.projeto_original ? {
       projeto_original: {
@@ -195,7 +189,6 @@ export function Orientacoes() {
   const { toasts, toast, dismiss } = useToast()
 
   const [orientacoes, setOrientacoes] = useState<Orientacao[]>(isDemoMode ? demo.orientacoes : [])
-  const [tarefas, setTarefas] = useState<Tarefa[]>(isDemoMode ? demo.tarefas : [])
   const [loading, setLoading] = useState(!isDemoMode)
 
   // Dialog / form
@@ -214,7 +207,6 @@ export function Orientacoes() {
   // Archived section
   const [showArchived, setShowArchived] = useState(false)
 
-  // Tarefa inline add
   // Reunião inline add
   const [activeReuniaoId, setActiveReuniaoId] = useState<string | null>(null)
   const [novaReuniaoData, setNovaReuniaoData] = useState('')
@@ -232,9 +224,8 @@ export function Orientacoes() {
 
   useEffect(() => {
     if (isDemoMode) return
-    loadOrientacoes().then(({ orientacoes: o, tarefas: t }) => {
+    loadOrientacoes().then(o => {
       setOrientacoes(o)
-      setTarefas(t)
       setLoading(false)
     }).catch(err => { toast({ title: 'Erro ao carregar', description: err.message, variant: 'destructive' }); setLoading(false) })
   }, [isDemoMode])
@@ -322,7 +313,7 @@ export function Orientacoes() {
       updated_at: now,
     }
     try {
-      await saveOrientacaoFile(ghOrientacao, tarefas)
+      await saveOrientacaoFile(ghOrientacao)
     } catch (err: any) { toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' }); return }
     setOrientacoes(prev => editing ? prev.map(o => o.id === id ? ghOrientacao : o) : [ghOrientacao, ...prev])
     toast({ title: editing ? 'Orientação atualizada' : 'Orientação criada' })
@@ -335,7 +326,6 @@ export function Orientacoes() {
     if (!confirm('Remover esta orientação?')) return
     if (isDemoMode) {
       setOrientacoes(prev => prev.filter(o => o.id !== id))
-      setTarefas(prev => prev.filter(t => t.orientacao_id !== id))
       toast({ title: 'Orientação removida' })
       return
     }
@@ -343,7 +333,6 @@ export function Orientacoes() {
       await deleteOrientacaoFile(id)
     } catch (err: any) { toast({ title: 'Erro ao remover', variant: 'destructive' }); return }
     setOrientacoes(prev => prev.filter(o => o.id !== id))
-    setTarefas(prev => prev.filter(t => t.orientacao_id !== id))
     toast({ title: 'Orientação removida' })
   }
 
@@ -357,7 +346,7 @@ export function Orientacoes() {
       return
     }
     try {
-      await saveOrientacaoFile(updated, tarefas)
+      await saveOrientacaoFile(updated)
       setOrientacoes(prev => prev.map(x => x.id === o.id ? updated : x))
       toast({ title: o.arquivada ? 'Orientação reativada' : 'Orientação arquivada' })
     } catch (err: any) {
@@ -377,62 +366,38 @@ export function Orientacoes() {
       const raw = load(text) as any[]
       if (!Array.isArray(raw)) throw new Error('Arquivo inválido: esperado array YAML')
 
-      const importedOrientacoes: Orientacao[] = []
-      const importedTarefas: Tarefa[] = []
+      const importedOrientacoes: Orientacao[] = raw.map((item: any) => ({
+        id: item.id ?? crypto.randomUUID(),
+        user_id: isDemoMode ? 'demo-user-id' : 'github-user',
+        nome_orientando: item.nome_orientando ?? '',
+        curso: item.curso ?? 'Mestrado',
+        titulo_provisorio: item.titulo_provisorio,
+        ano_ingresso: item.ano_ingresso,
+        previsao_conclusao: item.previsao_conclusao,
+        exame_qualificacao: item.exame_qualificacao,
+        arquivada: item.arquivada,
+        leituras: item.leituras ?? [],
+        links_documentos: item.links_documentos ?? [],
+        reunioes: (item.reunioes ?? []).map((r: any) => ({
+          id: r.id ?? crypto.randomUUID(),
+          ...(r.data ? { data: r.data } : {}),
+          texto: r.texto ?? '',
+          ...(r.anexo ? { anexo: r.anexo as Anexo } : {}),
+        })),
+        ...(item.projeto_original ? { projeto_original: item.projeto_original as Anexo } : {}),
+        created_at: item.created_at ?? new Date().toISOString(),
+        updated_at: item.updated_at ?? new Date().toISOString(),
+      }))
 
-      for (const item of raw) {
-        const o: Orientacao = {
-          id: item.id ?? crypto.randomUUID(),
-          user_id: isDemoMode ? 'demo-user-id' : 'github-user',
-          nome_orientando: item.nome_orientando ?? '',
-          curso: item.curso ?? 'Mestrado',
-          titulo_provisorio: item.titulo_provisorio,
-          ano_ingresso: item.ano_ingresso,
-          previsao_conclusao: item.previsao_conclusao,
-          exame_qualificacao: item.exame_qualificacao,
-          arquivada: item.arquivada,
-          leituras: item.leituras ?? [],
-          links_documentos: item.links_documentos ?? [],
-          reunioes: (item.reunioes ?? []).map((r: any) => ({
-            id: r.id ?? crypto.randomUUID(),
-            ...(r.data ? { data: r.data } : {}),
-            texto: r.texto ?? '',
-            ...(r.anexo ? { anexo: r.anexo as Anexo } : {}),
-          })),
-          ...(item.projeto_original ? { projeto_original: item.projeto_original as Anexo } : {}),
-          created_at: item.created_at ?? new Date().toISOString(),
-          updated_at: item.updated_at ?? new Date().toISOString(),
-        }
-        importedOrientacoes.push(o)
-
-        const itemTarefas: Tarefa[] = (item.tarefas ?? []).map((t: any) => ({
-          id: t.id ?? crypto.randomUUID(),
-          user_id: isDemoMode ? 'demo-user-id' : 'github-user',
-          orientacao_id: o.id,
-          descricao: t.descricao ?? '',
-          concluida: t.concluida ?? false,
-          created_at: t.created_at ?? new Date().toISOString(),
-        }))
-        importedTarefas.push(...itemTarefas)
-      }
-
-      // Merge: overwrite by id, append new
       setOrientacoes(prev => {
         const map = new Map(prev.map(x => [x.id, x]))
         importedOrientacoes.forEach(o => map.set(o.id, o))
         return Array.from(map.values())
       })
-      setTarefas(prev => {
-        const ids = new Set(importedTarefas.map(t => t.orientacao_id))
-        const kept = prev.filter(t => !ids.has(t.orientacao_id))
-        return [...kept, ...importedTarefas]
-      })
 
       if (!isDemoMode) {
-        for (let i = 0; i < importedOrientacoes.length; i++) {
-          const o = importedOrientacoes[i]
-          const its = importedTarefas.filter(t => t.orientacao_id === o.id)
-          await saveOrientacaoFile(o, its)
+        for (const o of importedOrientacoes) {
+          await saveOrientacaoFile(o)
         }
       }
 
@@ -443,8 +408,6 @@ export function Orientacoes() {
       setImporting(false)
     }
   }
-
-  /* ── Tarefas ── */
 
   /* ── Reuniões ── */
 
@@ -487,7 +450,7 @@ export function Orientacoes() {
     setActiveReuniaoId(null)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -499,7 +462,7 @@ export function Orientacoes() {
     setOrientacoes(updatedOrientacoes)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -515,7 +478,7 @@ export function Orientacoes() {
     setOrientacoes(updatedOrientacoes)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -532,7 +495,7 @@ export function Orientacoes() {
     setActiveLeituraId(null)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -544,7 +507,7 @@ export function Orientacoes() {
     setOrientacoes(updatedOrientacoes)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -561,7 +524,7 @@ export function Orientacoes() {
     setActiveLinkId(null)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -573,7 +536,7 @@ export function Orientacoes() {
     setOrientacoes(updatedOrientacoes)
     if (!isDemoMode) {
       const updatedO = updatedOrientacoes.find(o => o.id === orientacaoId)!
-      saveOrientacaoFile(updatedO, tarefas).catch(() => {})
+      saveOrientacaoFile(updatedO).catch(() => {})
     }
   }
 
@@ -623,7 +586,7 @@ export function Orientacoes() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Orientações</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Gestão de orientandos(as) e tarefas</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Gestão de orientandos(as)</p>
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -633,7 +596,7 @@ export function Orientacoes() {
           <Button variant="outline" size="sm" onClick={() => exportPDF(orientacoes)}>
             <FileText className="w-4 h-4" /> PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportAllYAML(orientacoes, tarefas)} title="Exporta todas as orientações em YAML para backup ou importação">
+          <Button variant="outline" size="sm" onClick={() => exportAllYAML(orientacoes)} title="Exporta todas as orientações em YAML para backup ou importação">
             <Download className="w-4 h-4" /> Exportar Todas
           </Button>
           <Button
@@ -1035,7 +998,6 @@ export function Orientacoes() {
                             </div>
                           </TabsContent>
 
-                          {/* ── Tarefas tab ── */}
                           {/* ── Projeto Original tab (conditional) ── */}
                           {o.projeto_original && (
                             <TabsContent value="projeto">

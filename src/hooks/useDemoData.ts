@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext'
-import type { Prestacao, Despesa, Discurso, ProjetoFinanciado, Orientacao, Tarefa, Nucleacao, Internacionalizacao } from '@/types'
+import type { Prestacao, Despesa, Discurso, ProjetoFinanciado, Orientacao, Nucleacao, Internacionalizacao } from '@/types'
 
 const DEMO_PRESTACOES: Prestacao[] = [
   {
@@ -66,12 +66,6 @@ const DEMO_ORIENTACOES: Orientacao[] = [
     reunioes: [],
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   },
-]
-
-const DEMO_TAREFAS: Tarefa[] = [
-  { id: '1', user_id: 'demo-user-id', orientacao_id: '1', descricao: 'Entregar rascunho do cap. 3', concluida: false, created_at: new Date().toISOString() },
-  { id: '2', user_id: 'demo-user-id', orientacao_id: '1', descricao: 'Revisar referências bibliográficas', concluida: true, created_at: new Date().toISOString() },
-  { id: '3', user_id: 'demo-user-id', orientacao_id: '2', descricao: 'Implementar protótipo do chatbot', concluida: false, created_at: new Date().toISOString() },
 ]
 
 const DEMO_NUCLEACOES: Nucleacao[] = [
@@ -150,7 +144,6 @@ export function useDemoData() {
     discursos: DEMO_DISCURSOS,
     projetos: DEMO_PROJETOS,
     orientacoes: DEMO_ORIENTACOES,
-    tarefas: DEMO_TAREFAS,
     nucleacoes: DEMO_NUCLEACOES,
     internacionalizacoes: DEMO_INTERNACIONALIZACOES,
   }
